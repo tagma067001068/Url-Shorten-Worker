@@ -1,6 +1,65 @@
 // ====== file-r2 专用逻辑 ======
 // 依赖: main.js 中的 apiSrv, password_value, showResult(), addUrlToList(), loadUrlList() 等
 
+// ====== 图片预览配置 ======
+const IMG_RESIZE_BASE  = "https://r2.lvedong.eu.org";  // Transformations 域名（留空则跳过缩略图，原图 + CSS 缩放）
+const IMG_PREVIEW_WIDTH = 200;                          // 缩略图宽度 (px)
+const IMG_EXTS = /\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?)$/i;
+
+// 从 R2 URL 构建 Transformations 缩略图 URL
+function buildThumbUrl(r2Url) {
+  if (!IMG_RESIZE_BASE) return r2Url;  // 未配置域名时回退原图
+  const url = new URL(r2Url);
+  return IMG_RESIZE_BASE + "/cdn-cgi/image/width=" + IMG_PREVIEW_WIDTH +
+         ",quality=75,format=auto" + url.pathname;
+}
+
+// 插入预览图片（通用：自动预览 + 按钮触发共用）
+function insertPreviewImg(targetDiv, r2Url) {
+  // 避免重复插入
+  if (targetDiv.querySelector('img.r2-preview')) return;
+
+  const img = document.createElement('img');
+  img.src = buildThumbUrl(r2Url);
+  img.className = 'r2-preview mt-2';
+  img.style.cssText = 'max-width:' + IMG_PREVIEW_WIDTH + 'px;max-height:200px;border-radius:6px;cursor:pointer;';
+  img.loading = 'lazy';
+  img.title = '点击查看原图';
+  img.onclick = function() { window.open(r2Url, '_blank'); };
+  targetDiv.appendChild(img);
+}
+
+// 覆盖 buildValueItemFunc：图片后缀自动预览，其它后缀显示"预览"按钮
+buildValueItemFunc = function(r2Url) {
+  let container = document.createElement('div');
+  container.classList.add("form-control", "rounded-top-0");
+
+  // URL 文本
+  let urlText = document.createElement('span');
+  urlText.style.wordBreak = 'break-all';
+  urlText.innerText = r2Url;
+  container.appendChild(urlText);
+
+  // 判断是否图片后缀
+  if (IMG_EXTS.test(r2Url)) {
+    // 图片后缀：自动插入缩略图预览
+    insertPreviewImg(container, r2Url);
+  } else {
+    // 非图片后缀：显示"预览"按钮（主动触发，兜底后缀判断不全）
+    let previewBtn = document.createElement('button');
+    previewBtn.type = 'button';
+    previewBtn.className = 'btn btn-outline-info btn-sm mt-2';
+    previewBtn.innerText = '🔍 预览';
+    previewBtn.onclick = function() {
+      insertPreviewImg(container, r2Url);
+      previewBtn.style.display = 'none';  // 预览后隐藏按钮
+    };
+    container.appendChild(previewBtn);
+  }
+
+  return container;
+}
+
 // 状态变量
 let r2UploadUrl = null;   // presigned PUT URL
 let r2PublicUrl = null;   // R2 公开 URL
