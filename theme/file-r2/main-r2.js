@@ -80,7 +80,7 @@ function uploadFileToR2(file, uploadUrl, contentType) {
 
   const xhr = new XMLHttpRequest();
   xhr.open('PUT', uploadUrl, true);
-  xhr.setRequestHeader('Content-Type', contentType);
+  // 不设 Content-Type, 避免触发 CORS 预检 (Content-Type 不在签名中, R2 不会校验)
 
   // 上传进度
   xhr.upload.addEventListener('progress', function(e) {
