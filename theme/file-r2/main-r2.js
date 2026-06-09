@@ -154,8 +154,8 @@ function uploadFileToR2(file, uploadUrl, contentType) {
   // 上传完成
   xhr.addEventListener('load', function() {
     if (xhr.status >= 200 && xhr.status < 300) {
-      // 步骤 3: confirm 存 KV
-      confirmUpload(r2FinalKey, r2PublicUrl);
+      // 步骤 3: 上传完成, 填入字段
+      onUploadDone(r2FinalKey, r2PublicUrl);
     } else {
       resetUploadBtn();
       progressWrap.style.display = 'none';
@@ -172,60 +172,28 @@ function uploadFileToR2(file, uploadUrl, contentType) {
   xhr.send(file);
 }
 
-// ====== 步骤 3: confirm 存 KV ======
-function confirmUpload(key, r2Url) {
-  fetch(apiSrv, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      cmd: 'confirm',
-      key: key,
-      r2Url: r2Url,
-      password: password_value
-    })
-  })
-  .then(function(response) { return response.json(); })
-  .then(function(json) {
-    if (json.status == 200) {
-      // 填入结果
-      document.getElementById('longURL').value = r2Url;
-      document.getElementById('keyPhrase').value = key;
-      document.getElementById('addBtn').disabled = false;
+// ====== 步骤 3: 上传完成, 填入字段 (不写 KV, 等用户点"保存到 KV") ======
+function onUploadDone(key, r2Url) {
+  // 填入结果
+  document.getElementById('longURL').value = r2Url;
+  document.getElementById('keyPhrase').value = key;
+  document.getElementById('addBtn').disabled = false;
 
-      // 保存到 localStorage
-      localStorage.setItem(key, r2Url);
-      loadUrlList();
+  // 进度条变绿
+  const progressBar = document.getElementById('progressBar');
+  progressBar.classList.remove('progress-bar-animated');
+  progressBar.classList.add('bg-success');
+  progressBar.innerText = '上传完成 ✓';
 
-      // 进度条变绿
-      const progressBar = document.getElementById('progressBar');
-      progressBar.classList.remove('progress-bar-animated');
-      progressBar.classList.add('bg-success');
-      progressBar.innerText = '上传完成 ✓';
-
-      uploadBtn.innerText = '上传完成';
-      showResult('文件已上传: ' + r2Url);
-    } else {
-      resetUploadBtn();
-      document.getElementById('progressWrap').style.display = 'none';
-      showResult('confirm 失败: ' + (json.error || '未知错误'));
-    }
-  })
-  .catch(function(err) {
-    resetUploadBtn();
-    document.getElementById('progressWrap').style.display = 'none';
-    showResult('confirm 请求失败: ' + err.message);
-  });
+  uploadBtn.innerText = '上传完成';
+  showResult('文件已上传到 R2: ' + r2Url + '\n请点击"保存到 KV"写入 KV');
 }
 
-// ====== 保存到 KV（复用 main.js 的 shorturl 逻辑，但用 confirm 已完成，这里只是显示）======
+// ====== 保存到 KV（调用 main.js 的 shorturl, 写 KV + localStorage + 刷新列表）======
 function saveToKV() {
-  // KV 已经在 confirm 步骤中写入了
-  // 这个按钮只是显示短链地址
-  const key = document.getElementById('keyPhrase').value;
-  if (key) {
-    const shortUrl = window.location.protocol + '//' + window.location.host + '/' + key;
-    showResult(shortUrl);
-  }
+  // longURL 和 keyPhrase 已由 onUploadDone 填入
+  // 调用 main.js 的 shorturl() 完成 add 命令 (写 KV + localStorage + 刷新列表)
+  shorturl();
 }
 
 // ====== 工具函数 ======
