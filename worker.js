@@ -17,6 +17,89 @@ const protect_keylist = [
   "password",
 ]
 
+// ====== R2 S3 API 配置 (file-r2 模式) ======
+// 以下变量通过 Cloudflare 面板的环境变量(Variables)/加密机密(Secrets)注入, 作为全局变量自动可用:
+//   R2_ACCOUNT_ID        - R2 账户 ID (明文变量)
+//   R2_ACCESS_KEY_ID     - S3 API Access Key ID (建议设为加密 Secret)
+//   R2_SECRET_ACCESS_KEY - S3 API Secret Access Key (建议设为加密 Secret)
+//   R2_BUCKET_NAME       - R2 存储桶名称 (明文变量)
+//   R2_PUBLIC_URL        - R2 公开访问 URL, 如 https://pub-xxxx.r2.dev (明文变量)
+// 注意: 面板中的变量名必须与上述完全一致(含大小写)
+
+// ====== S3 Signature V4 辅助函数 ======
+function toHex(buffer) {
+  return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+async function hmacSha256(key, message) {
+  const keyData = typeof key === 'string' ? new TextEncoder().encode(key) : key
+  const msgData = new TextEncoder().encode(message)
+  const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  return await crypto.subtle.sign('HMAC', cryptoKey, msgData)
+}
+
+async function sha256Hex(data) {
+  const encoded = new TextEncoder().encode(data)
+  const hash = await crypto.subtle.digest('SHA-256', encoded)
+  return toHex(hash)
+}
+
+function formatDateStamp(date) {
+  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '').slice(0, 8)
+}
+
+function formatAmzDate(date) {
+  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '').slice(0, 15) + 'Z'
+}
+
+function uriEncode(str, encodeSlash) {
+  let result = encodeURIComponent(str)
+  result = result.replace(/%2F/g, encodeSlash ? '%2F' : '/')
+  result = result.replace(/\*/g, '%2A')
+  return result
+}
+
+async function generatePresignedPutUrl(key, contentType) {
+  const host = R2_ACCOUNT_ID + '.r2.cloudflarestorage.com'
+  const now = new Date()
+  const dateStamp = formatDateStamp(now)
+  const amzDate = formatAmzDate(now)
+  const credentialScope = dateStamp + '/auto/s3/aws4_request'
+  const expiresIn = 900
+
+  // Query parameters (sorted)
+  const params = [
+    'X-Amz-Algorithm=AWS4-HMAC-SHA256',
+    'X-Amz-Credential=' + uriEncode(R2_ACCESS_KEY_ID + '/' + credentialScope, true),
+    'X-Amz-Date=' + amzDate,
+    'X-Amz-Expires=' + expiresIn,
+    'X-Amz-SignedHeaders=host'
+  ].join('&')
+
+  // Canonical request
+  const canonicalUri = '/' + R2_BUCKET_NAME + '/' + uriEncode(key, true)
+  const canonicalHeaders = 'host:' + host + '\n'
+  const signedHeaders = 'host'
+  const canonicalRequest = 'PUT\n' + canonicalUri + '\n' + params + '\n' + canonicalHeaders + '\n' + signedHeaders + '\nUNSIGNED-PAYLOAD'
+
+  // String to sign
+  const requestHash = await sha256Hex(canonicalRequest)
+  const stringToSign = 'AWS4-HMAC-SHA256\n' + amzDate + '\n' + credentialScope + '\n' + requestHash
+
+  // Signing key
+  const kDate = await hmacSha256('AWS4' + R2_SECRET_ACCESS_KEY, dateStamp)
+  const kRegion = await hmacSha256(kDate, 'auto')
+  const kService = await hmacSha256(kRegion, 's3')
+  const kSigning = await hmacSha256(kService, 'aws4_request')
+
+  // Signature
+  const sigBuffer = await hmacSha256(kSigning, stringToSign)
+  const signature = toHex(sigBuffer)
+
+  const finalUrl = 'https://' + host + '/' + R2_BUCKET_NAME + '/' + uriEncode(key, true) + '?' + params + '&X-Amz-Signature=' + signature
+  return finalUrl
+}
+
 let index_html = "https://crazypeace.github.io/Url-Shorten-Worker/" + config.theme + "/index.html"
 let result_html = "https://crazypeace.github.io/Url-Shorten-Worker/" + config.theme + "/result.html"
 
@@ -287,6 +370,53 @@ async function handleRequest(request) {
         })
       }
 
+    } else if (req_cmd == "presign") {
+      // file-r2: 生成 presigned PUT URL
+      let req_filename = req["filename"]
+      let req_contentType = req["contentType"] || "application/octet-stream"
+
+      if (!req_filename) {
+        return new Response(`{"status":500, "error":"Error: filename required."}`, {
+          headers: response_header,
+        })
+      }
+
+      // 文件命名: 优先原始文件名, 重名加随机前缀
+      let finalKey = req_filename
+      let existing = await LINKS.get(finalKey)
+      if (existing != null) {
+        // 重名: prefix_random.ext
+        let dotIndex = req_filename.lastIndexOf('.')
+        let namePart = dotIndex > 0 ? req_filename.substring(0, dotIndex) : req_filename
+        let extPart = dotIndex > 0 ? req_filename.substring(dotIndex) : ''
+        finalKey = namePart + '_' + await randomString(6) + extPart
+      }
+
+      // 生成 presigned URL
+      let uploadUrl = await generatePresignedPutUrl(finalKey, req_contentType)
+      let r2Url = R2_PUBLIC_URL + '/' + encodeURIComponent(finalKey)
+
+      return new Response(JSON.stringify({ status: 200, key: finalKey, uploadUrl: uploadUrl, r2Url: r2Url }), {
+        headers: response_header,
+      })
+
+    } else if (req_cmd == "confirm") {
+      // file-r2: 确认上传完成, 存入 KV
+      let req_key = req["key"]
+      let req_r2Url = req["r2Url"]
+
+      if (!req_key || !req_r2Url) {
+        return new Response(`{"status":500, "error":"Error: key and r2Url required."}`, {
+          headers: response_header,
+        })
+      }
+
+      await LINKS.put(req_key, req_r2Url)
+
+      return new Response(JSON.stringify({ status: 200, key: req_key, error: "" }), {
+        headers: response_header,
+      })
+
     }
 
   } else if (request.method === "OPTIONS") {
@@ -394,6 +524,9 @@ async function handleRequest(request) {
     return new Response(blob, {
       // 图片不能指定content-type为 text/plain
     })
+  } else if (config.system_type == "file-r2") {
+    // file-r2: value 是 R2 公开 URL, 直接 302 重定向
+    return Response.redirect(value, 302)
   } else {
     // 如果只是一个单纯的key-value系统, 简单的显示value就行了
     return new Response(value, {
