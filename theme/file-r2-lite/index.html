@@ -33,7 +33,7 @@
     </div>
   </div>
 
-  <!-- 保存到 KV（复用 imghost 布局） -->
+  <!-- 保存到 KV -->
   <div class="card shadow m-3">
     <h5 class="card-header">文件保管站 File Hosting (R2 Lite)</h5>
     <div class="card-body">
@@ -104,25 +104,6 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-primary" onclick='copyurl("result")' data-bs-toggle="popover" data-bs-placement="bottom" data-bs-content="Copied!">Copy</button>
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 预览 Modal -->
-  <div class="modal fade" id="previewModal" tabindex="-1" role="dialog" aria-labelledby="previewModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="previewModalLabel">预览</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body text-center" id="previewBody">
-          <!-- 预览内容动态插入 -->
-        </div>
-        <div class="modal-footer">
-          <a href="#" target="_blank" class="btn btn-outline-primary" id="previewOpenNew">在新标签页打开</a>
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
         </div>
       </div>
     </div>

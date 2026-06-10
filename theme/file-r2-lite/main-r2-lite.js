@@ -1,13 +1,10 @@
-// ====== file-r2-lite 专用逻辑 (无自动缩略图) ======
+// ====== file-r2-lite 专用逻辑 (无自动缩略图, 内联预览) ======
 // 依赖: main.js 中的 apiSrv, password_value, showResult(), addUrlToList(), loadUrlList() 等
 
-// ====== 图片后缀判断 ======
-const IMG_EXTS = /\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?)$/i;
-
-// ====== 预览图片列表 (带扩展名) ======
+// ====== 预览支持的文件后缀 ======
 const PREVIEW_EXTS = /\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?|mp4|webm|mp3|ogg|wav|pdf)$/i;
 
-// ====== 覆盖 buildValueItemFunc: 显示 URL + 预览按钮 ======
+// ====== 覆盖 buildValueItemFunc: 显示 URL + 预览按钮 + 内联预览区 ======
 buildValueItemFunc = function(r2Url) {
   let container = document.createElement('div');
   container.classList.add("form-control", "rounded-top-0");
@@ -25,79 +22,119 @@ buildValueItemFunc = function(r2Url) {
     previewBtn.className = 'btn btn-outline-info btn-sm mt-2';
     previewBtn.innerText = '🔍 预览';
     previewBtn.onclick = function() {
-      // 从 localStorage 读取数据（不查 KV）
-      let keySpan = container.parentElement.querySelector('.input-group span.form-control');
-      if (keySpan) {
-        // 从短链 URL 中提取 key
-        let shortUrlText = keySpan.innerText;
-        let parts = shortUrlText.split('/');
-        let key = parts[parts.length - 1];
-        previewImg(key);
-      }
+      togglePreview(container, urlText.innerText, previewBtn);
     };
     container.appendChild(previewBtn);
+
+    // 内联预览区域（初始隐藏）
+    let previewArea = document.createElement('div');
+    previewArea.className = 'r2-inline-preview mt-2';
+    previewArea.style.display = 'none';
+    container.appendChild(previewArea);
   }
 
   return container;
 }
 
-// ====== 预览功能：从 localStorage 读取 R2 URL，弹窗显示 ======
-function previewImg(key) {
-  let r2Url = localStorage.getItem(key);
-  if (!r2Url) {
-    showResult('localStorage 中未找到此条目');
+// ====== 内联预览：切换显示/隐藏 ======
+function togglePreview(container, r2Url, btn) {
+  let previewArea = container.querySelector('.r2-inline-preview');
+  if (!previewArea) return;
+
+  // 如果已经有内容，切换显示
+  if (previewArea.children.length > 0) {
+    if (previewArea.style.display === 'none') {
+      previewArea.style.display = 'block';
+      btn.innerText = '🔽 收起';
+    } else {
+      previewArea.style.display = 'none';
+      btn.innerText = '🔍 预览';
+    }
     return;
   }
 
-  let previewBody = document.getElementById('previewBody');
-  let previewLabel = document.getElementById('previewModalLabel');
-  let openNewBtn = document.getElementById('previewOpenNew');
+  // 首次点击：构建预览内容
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 加载中...';
 
-  // 清空
-  previewBody.innerHTML = '';
-  previewLabel.innerText = key;
-
-  // 设置"在新标签页打开"按钮
-  openNewBtn.href = r2Url;
-
-  // 判断文件类型
   if (/\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?)$/i.test(r2Url)) {
-    // 图片：直接嵌入显示
+    // 图片
     let img = document.createElement('img');
     img.src = r2Url;
-    img.style.cssText = 'max-width:100%;max-height:70vh;border-radius:6px;';
-    img.alt = key;
-    previewBody.appendChild(img);
+    img.style.cssText = 'max-width:100%;max-height:400px;border-radius:6px;cursor:pointer;';
+    img.title = '点击查看原图';
+    img.onload = function() {
+      btn.disabled = false;
+      btn.innerText = '🔽 收起';
+      previewArea.style.display = 'block';
+    };
+    img.onerror = function() {
+      btn.disabled = false;
+      btn.innerText = '🔍 预览';
+      previewArea.innerHTML = '<small class="text-danger">图片加载失败</small>';
+      previewArea.style.display = 'block';
+    };
+    img.onclick = function() { window.open(r2Url, '_blank'); };
+    previewArea.appendChild(img);
   } else if (/\.(mp4|webm)$/i.test(r2Url)) {
     // 视频
     let video = document.createElement('video');
     video.src = r2Url;
     video.controls = true;
-    video.style.cssText = 'max-width:100%;max-height:70vh;border-radius:6px;';
-    previewBody.appendChild(video);
+    video.style.cssText = 'max-width:100%;max-height:400px;border-radius:6px;';
+    video.onloadeddata = function() {
+      btn.disabled = false;
+      btn.innerText = '🔽 收起';
+      previewArea.style.display = 'block';
+    };
+    video.onerror = function() {
+      btn.disabled = false;
+      btn.innerText = '🔍 预览';
+      previewArea.innerHTML = '<small class="text-danger">视频加载失败</small>';
+      previewArea.style.display = 'block';
+    };
+    previewArea.appendChild(video);
   } else if (/\.(mp3|ogg|wav)$/i.test(r2Url)) {
     // 音频
     let audio = document.createElement('audio');
     audio.src = r2Url;
     audio.controls = true;
     audio.style.cssText = 'width:100%;';
-    previewBody.appendChild(audio);
+    audio.onloadeddata = function() {
+      btn.disabled = false;
+      btn.innerText = '🔽 收起';
+      previewArea.style.display = 'block';
+    };
+    audio.onerror = function() {
+      btn.disabled = false;
+      btn.innerText = '🔍 预览';
+      previewArea.innerHTML = '<small class="text-danger">音频加载失败</small>';
+      previewArea.style.display = 'block';
+    };
+    previewArea.appendChild(audio);
   } else if (/\.pdf$/i.test(r2Url)) {
     // PDF
     let iframe = document.createElement('iframe');
     iframe.src = r2Url;
-    iframe.style.cssText = 'width:100%;height:70vh;border:none;border-radius:6px;';
-    previewBody.appendChild(iframe);
+    iframe.style.cssText = 'width:100%;height:500px;border:none;border-radius:6px;';
+    iframe.onload = function() {
+      btn.disabled = false;
+      btn.innerText = '🔽 收起';
+      previewArea.style.display = 'block';
+    };
+    iframe.onerror = function() {
+      btn.disabled = false;
+      btn.innerText = '🔍 预览';
+      previewArea.innerHTML = '<small class="text-danger">PDF 加载失败</small>';
+      previewArea.style.display = 'block';
+    };
+    previewArea.appendChild(iframe);
   } else {
-    // 其他：显示链接
-    let p = document.createElement('p');
-    p.innerText = '此文件类型不支持内联预览，请在新标签页中打开。';
-    previewBody.appendChild(p);
+    btn.disabled = false;
+    btn.innerText = '🔍 预览';
+    previewArea.innerHTML = '<small class="text-muted">此文件类型不支持内联预览</small>';
+    previewArea.style.display = 'block';
   }
-
-  // 弹出预览 Modal
-  var modal = new bootstrap.Modal(document.getElementById('previewModal'));
-  modal.show();
 }
 
 // 状态变量
