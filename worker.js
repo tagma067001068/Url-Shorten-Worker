@@ -26,7 +26,7 @@ const protect_keylist = [
 //   R2_PUBLIC_URL        - R2 公开访问 URL, 如 https://pub-xxxx.r2.dev (明文变量)
 // 注意: 面板中的变量名必须与上述完全一致(含大小写)
 
-// S3 签名 + presigned URL 已移至前端 main-r2-s3.js
+// S3 签名 + presigned URL 已移至前端 r2-s3.js
 // Worker 仅负责注入 R2 配置占位符 + KV 读写
 
 let index_html = "https://crazypeace.github.io/Url-Shorten-Worker/" + config.theme + "/index.html"
