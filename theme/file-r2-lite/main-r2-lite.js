@@ -160,8 +160,8 @@ inputFile.addEventListener('change', function() {
   }
 });
 
-// ====== 步骤 1: 请求 presigned URL ======
-function uploadToR2() {
+// ====== 步骤 1: 查重 + 生成 presigned URL (前端直连 R2) ======
+async function uploadToR2() {
   const file = inputFile.files[0];
   if (!file) {
     alert('请先选择文件');
@@ -169,36 +169,37 @@ function uploadToR2() {
   }
 
   uploadBtn.disabled = true;
-  uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 获取上传链接...';
+  uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 检查文件名...';
 
-  fetch(apiSrv, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      cmd: 'presign',
-      filename: file.name,
-      contentType: file.type || 'application/octet-stream',
-      password: password_value
-    })
-  })
-  .then(function(response) { return response.json(); })
-  .then(function(json) {
-    if (json.status == 200) {
-      r2UploadUrl = json.uploadUrl;
-      r2PublicUrl = json.r2Url;
-      r2FinalKey  = json.key;
-
-      // 步骤 2: 直传 R2
-      uploadFileToR2(file, r2UploadUrl, file.type || 'application/octet-stream');
-    } else {
+  try {
+    // 1. 检查 R2 中是否重名, 重名则自动生成新文件名
+    var result = await r2ResolveFilename(file.name);
+    if (!result.key) {
       resetUploadBtn();
-      showResult(json.error || '获取上传链接失败');
+      showResult(result.error || '文件名解析失败');
+      return;
     }
-  })
-  .catch(function(err) {
+
+    r2FinalKey = result.key;
+    var cfg = getR2Config();
+    r2PublicUrl = cfg.publicUrl + '/' + encodeURIComponent(r2FinalKey);
+
+    if (result.renamed) {
+      uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 重名, 已改为 ' + r2FinalKey;
+      await new Promise(function(r) { setTimeout(r, 800); });
+    }
+
+    // 2. 前端生成 presigned PUT URL
+    uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 生成上传链接...';
+    r2UploadUrl = await r2GeneratePresignedPutUrl(r2FinalKey);
+
+    // 3. 直传 R2
+    uploadFileToR2(file, r2UploadUrl);
+
+  } catch (err) {
     resetUploadBtn();
-    showResult('请求 presign 失败: ' + err.message);
-  });
+    showResult('上传准备失败: ' + err.message);
+  }
 }
 
 // ====== 步骤 2: 直传 R2（带进度条）======
