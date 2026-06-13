@@ -57,6 +57,13 @@
         <span class="input-group-text" id="basic-addon3">本系统密码 Password</span>
         <input class="form-control" type="text" value="__PASSWORD__" readonly="true" id="passwordText" aria-describedby="basic-addon3">
       </div>
+
+      <!-- R2 S3 配置 (由 Worker 注入真实值, 隐藏) -->
+      <input type="hidden" id="r2AccountId"       value="__R2_ACCOUNT_ID__">
+      <input type="hidden" id="r2AccessKeyId"      value="__R2_ACCESS_KEY_ID__">
+      <input type="hidden" id="r2SecretAccessKey"  value="__R2_SECRET_ACCESS_KEY__">
+      <input type="hidden" id="r2BucketName"       value="__R2_BUCKET_NAME__">
+      <input type="hidden" id="r2PublicUrl"        value="__R2_PUBLIC_URL__">
     </div>
     
     <div class="card-footer">
@@ -114,6 +121,9 @@
   <script src="https://cdn.jsdelivr.net/gh/lrsjng/jquery-qrcode@0.18.0/dist/jquery-qrcode.min.js" crossorigin="anonymous"></script>
 
   <script src="https://crazypeace.github.io/Url-Shorten-Worker/main.js" crossorigin="anonymous"></script>
+
+  <!-- file-r2 S3 前端直连 (共享) -->
+  <script src="https://crazypeace.github.io/Url-Shorten-Worker/theme/file-r2-lite/main-r2-s3.js" crossorigin="anonymous"></script>
 
   <!-- file-r2 专用逻辑 -->
   <script src="https://crazypeace.github.io/Url-Shorten-Worker/theme/file-r2/main-r2.js" crossorigin="anonymous"></script>

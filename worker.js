@@ -299,23 +299,6 @@ async function handleRequest(request) {
         })
       }
 
-    } else if (req_cmd == "confirm") {
-      // file-r2: 确认上传完成, 存入 KV
-      let req_key = req["key"]
-      let req_r2Url = req["r2Url"]
-
-      if (!req_key || !req_r2Url) {
-        return new Response(`{"status":500, "error":"Error: key and r2Url required."}`, {
-          headers: response_header,
-        })
-      }
-
-      await LINKS.put(req_key, req_r2Url)
-
-      return new Response(JSON.stringify({ status: 200, key: req_key, error: "" }), {
-        headers: response_header,
-      })
-
     }
 
   } else if (request.method === "OPTIONS") {
