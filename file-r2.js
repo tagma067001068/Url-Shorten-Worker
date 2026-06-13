@@ -1,35 +1,23 @@
-// ====== file-r2 专用逻辑 ======
+// ====== file-r2 专用逻辑 (图片/视频/音频/PDF 预览 + 可选缩略图) ======
 // 依赖: main.js 中的 apiSrv, password_value, showResult(), addUrlToList(), loadUrlList() 等
+// 依赖: r2-s3.js 中的 r2ResolveFilename, r2GeneratePresignedPutUrl, getR2Config
 
-// ====== 图片预览配置 ======
-const IMG_RESIZE_BASE  = "https://r2.lvedong.eu.org";  // Transformations 域名（留空则跳过缩略图，原图 + CSS 缩放）
-const IMG_PREVIEW_WIDTH = 200;                          // 缩略图宽度 (px)
-const IMG_EXTS = /\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?)$/i;
+// ====== 预览配置 ======
+const IMG_RESIZE_BASE  = "";   // Transformations 域名, 如 "https://r2.lvedong.eu.org" (留空则用原图)
+const IMG_PREVIEW_WIDTH = 200; // 缩略图宽度 (px)
 
-// 从 R2 URL 构建 Transformations 缩略图 URL
+// ====== 预览支持的文件后缀 ======
+const PREVIEW_EXTS = /\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?|mp4|webm|mp3|ogg|wav|pdf)$/i;
+
+// ====== 缩略图 URL 构建 ======
 function buildThumbUrl(r2Url) {
-  if (!IMG_RESIZE_BASE) return r2Url;  // 未配置域名时回退原图
+  if (!IMG_RESIZE_BASE) return r2Url;
   const url = new URL(r2Url);
   return IMG_RESIZE_BASE + "/cdn-cgi/image/width=" + IMG_PREVIEW_WIDTH +
          ",quality=75,format=auto" + url.pathname;
 }
 
-// 插入预览图片（通用：自动预览 + 按钮触发共用）
-function insertPreviewImg(targetDiv, r2Url) {
-  // 避免重复插入
-  if (targetDiv.querySelector('img.r2-preview')) return;
-
-  const img = document.createElement('img');
-  img.src = buildThumbUrl(r2Url);
-  img.className = 'r2-preview mt-2';
-  img.style.cssText = 'max-width:' + IMG_PREVIEW_WIDTH + 'px;max-height:200px;border-radius:6px;cursor:pointer;';
-  img.loading = 'lazy';
-  img.title = '点击查看原图';
-  img.onclick = function() { window.open(r2Url, '_blank'); };
-  targetDiv.appendChild(img);
-}
-
-// 覆盖 buildValueItemFunc：图片后缀自动预览，其它后缀显示"预览"按钮
+// ====== 覆盖 buildValueItemFunc: 预览按钮 + 内联预览区 ======
 buildValueItemFunc = function(r2Url) {
   let container = document.createElement('div');
   container.classList.add("form-control", "rounded-top-0");
@@ -40,27 +28,129 @@ buildValueItemFunc = function(r2Url) {
   urlText.innerText = r2Url;
   container.appendChild(urlText);
 
-  // 判断是否图片后缀
-  if (IMG_EXTS.test(r2Url)) {
-    // 图片后缀：自动插入缩略图预览
-    insertPreviewImg(container, r2Url);
-  } else {
-    // 非图片后缀：显示"预览"按钮（主动触发，兜底后缀判断不全）
+  // 如果是可预览的文件后缀，显示"预览"按钮
+  if (PREVIEW_EXTS.test(r2Url)) {
     let previewBtn = document.createElement('button');
     previewBtn.type = 'button';
     previewBtn.className = 'btn btn-outline-info btn-sm mt-2';
     previewBtn.innerText = '🔍 预览';
     previewBtn.onclick = function() {
-      insertPreviewImg(container, r2Url);
-      previewBtn.style.display = 'none';  // 预览后隐藏按钮
+      togglePreview(container, urlText.innerText, previewBtn);
     };
     container.appendChild(previewBtn);
+
+    // 内联预览区域（初始隐藏）
+    let previewArea = document.createElement('div');
+    previewArea.className = 'r2-inline-preview mt-2';
+    previewArea.style.display = 'none';
+    container.appendChild(previewArea);
   }
 
   return container;
 }
 
-// 状态变量
+// ====== 内联预览：切换显示/隐藏 ======
+function togglePreview(container, r2Url, btn) {
+  let previewArea = container.querySelector('.r2-inline-preview');
+  if (!previewArea) return;
+
+  // 如果已经有内容，切换显示
+  if (previewArea.children.length > 0) {
+    if (previewArea.style.display === 'none') {
+      previewArea.style.display = 'block';
+      btn.innerText = '🔽 收起';
+    } else {
+      previewArea.style.display = 'none';
+      btn.innerText = '🔍 预览';
+    }
+    return;
+  }
+
+  // 首次点击：构建预览内容
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 加载中...';
+
+  if (/\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?)$/i.test(r2Url)) {
+    // 图片
+    let img = document.createElement('img');
+    img.src = buildThumbUrl(r2Url);
+    img.style.cssText = 'max-width:100%;max-height:400px;border-radius:6px;cursor:pointer;';
+    img.title = '点击查看原图';
+    img.onload = function() {
+      btn.disabled = false;
+      btn.innerText = '🔽 收起';
+      previewArea.style.display = 'block';
+    };
+    img.onerror = function() {
+      btn.disabled = false;
+      btn.innerText = '🔍 预览';
+      previewArea.innerHTML = '<small class="text-danger">图片加载失败</small>';
+      previewArea.style.display = 'block';
+    };
+    img.onclick = function() { window.open(r2Url, '_blank'); };
+    previewArea.appendChild(img);
+  } else if (/\.(mp4|webm)$/i.test(r2Url)) {
+    // 视频
+    let video = document.createElement('video');
+    video.src = r2Url;
+    video.controls = true;
+    video.style.cssText = 'max-width:100%;max-height:400px;border-radius:6px;';
+    video.onloadeddata = function() {
+      btn.disabled = false;
+      btn.innerText = '🔽 收起';
+      previewArea.style.display = 'block';
+    };
+    video.onerror = function() {
+      btn.disabled = false;
+      btn.innerText = '🔍 预览';
+      previewArea.innerHTML = '<small class="text-danger">视频加载失败</small>';
+      previewArea.style.display = 'block';
+    };
+    previewArea.appendChild(video);
+  } else if (/\.(mp3|ogg|wav)$/i.test(r2Url)) {
+    // 音频
+    let audio = document.createElement('audio');
+    audio.src = r2Url;
+    audio.controls = true;
+    audio.style.cssText = 'width:100%;';
+    audio.onloadeddata = function() {
+      btn.disabled = false;
+      btn.innerText = '🔽 收起';
+      previewArea.style.display = 'block';
+    };
+    audio.onerror = function() {
+      btn.disabled = false;
+      btn.innerText = '🔍 预览';
+      previewArea.innerHTML = '<small class="text-danger">音频加载失败</small>';
+      previewArea.style.display = 'block';
+    };
+    previewArea.appendChild(audio);
+  } else if (/\.pdf$/i.test(r2Url)) {
+    // PDF
+    let iframe = document.createElement('iframe');
+    iframe.src = r2Url;
+    iframe.style.cssText = 'width:100%;height:500px;border:none;border-radius:6px;';
+    iframe.onload = function() {
+      btn.disabled = false;
+      btn.innerText = '🔽 收起';
+      previewArea.style.display = 'block';
+    };
+    iframe.onerror = function() {
+      btn.disabled = false;
+      btn.innerText = '🔍 预览';
+      previewArea.innerHTML = '<small class="text-danger">PDF 加载失败</small>';
+      previewArea.style.display = 'block';
+    };
+    previewArea.appendChild(iframe);
+  } else {
+    btn.disabled = false;
+    btn.innerText = '🔍 预览';
+    previewArea.innerHTML = '<small class="text-muted">此文件类型不支持内联预览</small>';
+    previewArea.style.display = 'block';
+  }
+}
+
+// ====== 状态变量 ======
 let r2UploadUrl = null;   // presigned PUT URL
 let r2PublicUrl = null;   // R2 公开 URL
 let r2FinalKey  = null;   // 最终文件名 key
@@ -126,7 +216,7 @@ async function uploadToR2() {
 }
 
 // ====== 步骤 2: 直传 R2（带进度条）======
-function uploadFileToR2(file, uploadUrl, contentType) {
+function uploadFileToR2(file, uploadUrl) {
   uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 上传中...';
 
   // 显示进度条
