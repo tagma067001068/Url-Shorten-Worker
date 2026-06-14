@@ -6,12 +6,12 @@
 (function() {
   var IMG_MAX = 512;
 
-  // Cloudflare Image Transformations: {origin}/cdn-cgi/image/width=512,quality=75,format=auto{pathname}
-  // 用当前页面域名 (自定义域名), 不用 R2 URL 的 r2.dev 域名 (Image Transformations 不在 r2.dev 上)
+  // Cloudflare Image Transformations: {r2域名}/cdn-cgi/image/width=512,quality=75,format=auto{pathname}
+  // 用户需在 R2 自定义域名上开启 Image Transformations
   function thumbUrl(r2Url) {
     try {
       var u = new URL(r2Url);
-      return window.location.origin + "/cdn-cgi/image/width=" + IMG_MAX + ",quality=75,format=auto" + u.pathname;
+      return u.origin + "/cdn-cgi/image/width=" + IMG_MAX + ",quality=75,format=auto" + u.pathname;
     } catch(e) {
       return r2Url;
     }
