@@ -1,80 +1,37 @@
-// ====== file-r2 专用逻辑 (图片/视频/音频/PDF 预览 + 可选缩略图) ======
+// ====== file-r2 专用逻辑 (上传到 R2 + 保存到 KV) ======
 // 依赖: main.js 中的 apiSrv, password_value, showResult(), addUrlToList(), loadUrlList() 等
 // 依赖: r2-s3.js 中的 r2ResolveFilename, r2GeneratePresignedPutUrl, getR2Config
 
-// ====== 预览配置 ======
-const IMG_RESIZE_BASE  = "";   // Transformations 域名, 如 "https://r2.lvedong.eu.org" (留空则用原图)
-const IMG_PREVIEW_WIDTH = 200; // 缩略图宽度 (px)
-
-// ====== 预览支持的文件后缀 ======
-const PREVIEW_EXTS = /\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?|mp4|webm|mp3|ogg|wav|pdf)$/i;
-
-// ====== 缩略图 URL 构建 ======
-function buildThumbUrl(r2Url) {
-  if (!IMG_RESIZE_BASE) return r2Url;
-  const url = new URL(r2Url);
-  return IMG_RESIZE_BASE + "/cdn-cgi/image/width=" + IMG_PREVIEW_WIDTH +
-         ",quality=75,format=auto" + url.pathname;
-}
-
-// ====== 覆盖 buildValueItemFunc: 预览按钮 + 内联预览区 ======
+// ====== 覆盖 buildValueItemFunc: URL 文本 + 预览按钮 (点击加载原图) ======
 buildValueItemFunc = function(r2Url) {
-  let container = document.createElement('div');
+  var container = document.createElement('div');
   container.classList.add("form-control", "rounded-top-0");
 
-  // URL 文本
-  let urlText = document.createElement('span');
+  var urlText = document.createElement('span');
   urlText.style.wordBreak = 'break-all';
   urlText.innerText = r2Url;
   container.appendChild(urlText);
 
-  // 如果是可预览的文件后缀，显示"预览"按钮
-  if (PREVIEW_EXTS.test(r2Url)) {
-    let previewBtn = document.createElement('button');
-    previewBtn.type = 'button';
-    previewBtn.className = 'btn btn-outline-info btn-sm mt-2';
-    previewBtn.innerText = '🔍 预览';
-    previewBtn.onclick = function() {
-      togglePreview(container, urlText.innerText, previewBtn);
-    };
-    container.appendChild(previewBtn);
+  var previewArea = document.createElement('div');
+  previewArea.style.display = 'none';
+  container.appendChild(previewArea);
 
-    // 内联预览区域（初始隐藏）
-    let previewArea = document.createElement('div');
-    previewArea.className = 'r2-inline-preview mt-2';
-    previewArea.style.display = 'none';
-    container.appendChild(previewArea);
-  }
-
-  return container;
-}
-
-// ====== 内联预览：切换显示/隐藏 ======
-function togglePreview(container, r2Url, btn) {
-  let previewArea = container.querySelector('.r2-inline-preview');
-  if (!previewArea) return;
-
-  // 如果已经有内容，切换显示
-  if (previewArea.children.length > 0) {
-    if (previewArea.style.display === 'none') {
-      previewArea.style.display = 'block';
-      btn.innerText = '🔽 收起';
-    } else {
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-outline-info btn-sm mt-2';
+  btn.innerText = '🔍 预览';
+  btn.onclick = function() {
+    if (previewArea.style.display !== 'none' && previewArea.children.length > 0) {
       previewArea.style.display = 'none';
+      previewArea.innerHTML = '';
       btn.innerText = '🔍 预览';
+      return;
     }
-    return;
-  }
-
-  // 首次点击：构建预览内容
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 加载中...';
-
-  if (/\.(png|jpe?g|gif|webp|bmp|svg|ico|tiff?)$/i.test(r2Url)) {
-    // 图片
-    let img = document.createElement('img');
-    img.src = buildThumbUrl(r2Url);
-    img.style.cssText = 'max-width:100%;max-height:400px;border-radius:6px;cursor:pointer;';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+    var img = document.createElement('img');
+    img.src = r2Url;
+    img.style.cssText = 'max-width:100%;max-height:400px;border-radius:6px;cursor:pointer;margin-top:4px;';
     img.title = '点击查看原图';
     img.onload = function() {
       btn.disabled = false;
@@ -84,70 +41,17 @@ function togglePreview(container, r2Url, btn) {
     img.onerror = function() {
       btn.disabled = false;
       btn.innerText = '🔍 预览';
-      previewArea.innerHTML = '<small class="text-danger">图片加载失败</small>';
+      previewArea.innerHTML = '<small class="text-danger">加载失败</small>';
       previewArea.style.display = 'block';
     };
     img.onclick = function() { window.open(r2Url, '_blank'); };
+    previewArea.innerHTML = '';
     previewArea.appendChild(img);
-  } else if (/\.(mp4|webm)$/i.test(r2Url)) {
-    // 视频
-    let video = document.createElement('video');
-    video.src = r2Url;
-    video.controls = true;
-    video.style.cssText = 'max-width:100%;max-height:400px;border-radius:6px;';
-    video.onloadeddata = function() {
-      btn.disabled = false;
-      btn.innerText = '🔽 收起';
-      previewArea.style.display = 'block';
-    };
-    video.onerror = function() {
-      btn.disabled = false;
-      btn.innerText = '🔍 预览';
-      previewArea.innerHTML = '<small class="text-danger">视频加载失败</small>';
-      previewArea.style.display = 'block';
-    };
-    previewArea.appendChild(video);
-  } else if (/\.(mp3|ogg|wav)$/i.test(r2Url)) {
-    // 音频
-    let audio = document.createElement('audio');
-    audio.src = r2Url;
-    audio.controls = true;
-    audio.style.cssText = 'width:100%;';
-    audio.onloadeddata = function() {
-      btn.disabled = false;
-      btn.innerText = '🔽 收起';
-      previewArea.style.display = 'block';
-    };
-    audio.onerror = function() {
-      btn.disabled = false;
-      btn.innerText = '🔍 预览';
-      previewArea.innerHTML = '<small class="text-danger">音频加载失败</small>';
-      previewArea.style.display = 'block';
-    };
-    previewArea.appendChild(audio);
-  } else if (/\.pdf$/i.test(r2Url)) {
-    // PDF
-    let iframe = document.createElement('iframe');
-    iframe.src = r2Url;
-    iframe.style.cssText = 'width:100%;height:500px;border:none;border-radius:6px;';
-    iframe.onload = function() {
-      btn.disabled = false;
-      btn.innerText = '🔽 收起';
-      previewArea.style.display = 'block';
-    };
-    iframe.onerror = function() {
-      btn.disabled = false;
-      btn.innerText = '🔍 预览';
-      previewArea.innerHTML = '<small class="text-danger">PDF 加载失败</small>';
-      previewArea.style.display = 'block';
-    };
-    previewArea.appendChild(iframe);
-  } else {
-    btn.disabled = false;
-    btn.innerText = '🔍 预览';
-    previewArea.innerHTML = '<small class="text-muted">此文件类型不支持内联预览</small>';
     previewArea.style.display = 'block';
-  }
+  };
+  container.appendChild(btn);
+
+  return container;
 }
 
 // ====== 状态变量 ======
