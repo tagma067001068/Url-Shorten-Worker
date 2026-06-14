@@ -60,7 +60,7 @@ async function _signedFetch(method, path, queryParams, cfg) {
     'X-Amz-Credential': cfg.accessKeyId + '/' + credentialScope,
     'X-Amz-Date': amzDate,
     'X-Amz-Expires': '900',
-    'X-Amz-SignedHeaders': 'host;x-amz-content-sha256'
+    'X-Amz-SignedHeaders': 'host'
   };
   (queryParams || []).forEach(function(p) {
     var idx = p.indexOf('=');
@@ -74,8 +74,8 @@ async function _signedFetch(method, path, queryParams, cfg) {
   var canonicalQs = canonicalQsParts.join('&');
 
   var canonicalUri = '/' + cfg.bucketName + path;
-  var canonicalHeaders = 'host:' + host + '\n' + 'x-amz-content-sha256:UNSIGNED-PAYLOAD\n';
-  var signedHeaders = 'host;x-amz-content-sha256';
+  var canonicalHeaders = 'host:' + host + '\n';
+  var signedHeaders = 'host';
   var canonicalRequest = method + '\n' + canonicalUri + '\n' + canonicalQs + '\n' + canonicalHeaders + '\n' + signedHeaders + '\nUNSIGNED-PAYLOAD';
 
   var requestHash = await _sha256Hex(canonicalRequest);
@@ -100,7 +100,7 @@ async function r2KeyExists(key) {
     'max-keys=100'
   ], cfg);
 
-  const resp = await fetch(url, { headers: { 'x-amz-content-sha256': 'UNSIGNED-PAYLOAD' } });
+  const resp = await fetch(url);
   const xml = await resp.text();
 
   // 解析 XML 查找精确匹配的 key
@@ -129,7 +129,7 @@ async function r2GeneratePresignedPutUrl(key, expiresIn) {
     'X-Amz-Credential': cfg.accessKeyId + '/' + credentialScope,
     'X-Amz-Date': amzDate,
     'X-Amz-Expires': String(expiresIn),
-    'X-Amz-SignedHeaders': 'host;x-amz-content-sha256'
+    'X-Amz-SignedHeaders': 'host'
   };
 
   var sortedKeys = Object.keys(authParams).sort();
@@ -138,8 +138,8 @@ async function r2GeneratePresignedPutUrl(key, expiresIn) {
   }).join('&');
 
   var canonicalUri = '/' + cfg.bucketName + '/' + _uriEncode(key, true);
-  var canonicalHeaders = 'host:' + host + '\n' + 'x-amz-content-sha256:UNSIGNED-PAYLOAD\n';
-  var signedHeaders = 'host;x-amz-content-sha256';
+  var canonicalHeaders = 'host:' + host + '\n';
+  var signedHeaders = 'host';
   var canonicalRequest = 'PUT\n' + canonicalUri + '\n' + canonicalQs + '\n' + canonicalHeaders + '\n' + signedHeaders + '\nUNSIGNED-PAYLOAD';
 
   var requestHash = await _sha256Hex(canonicalRequest);
