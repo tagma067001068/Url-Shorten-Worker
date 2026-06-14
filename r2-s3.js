@@ -54,30 +54,41 @@ async function _signedFetch(method, path, queryParams, cfg) {
   const amzDate = _formatAmzDate(now);
   const credentialScope = dateStamp + '/auto/s3/aws4_request';
 
-  // 拼装查询参数 (排序)
-  const allParams = (queryParams || []).concat([
-    'X-Amz-Algorithm=AWS4-HMAC-SHA256',
-    'X-Amz-Credential=' + _uriEncode(cfg.accessKeyId + '/' + credentialScope, true),
-    'X-Amz-Date=' + amzDate,
-    'X-Amz-SignedHeaders=host'
-  ]).join('&');
+  // 合并所有查询参数, 按 key 字母序排序 (S3 签名要求)
+  const authParams = {
+    'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
+    'X-Amz-Credential': cfg.accessKeyId + '/' + credentialScope,
+    'X-Amz-Date': amzDate,
+    'X-Amz-Expires': '900',
+    'X-Amz-SignedHeaders': 'host;x-amz-content-sha256'
+  };
+  (queryParams || []).forEach(function(p) {
+    var idx = p.indexOf('=');
+    authParams[decodeURIComponent(p.substring(0, idx))] = decodeURIComponent(p.substring(idx + 1));
+  });
 
-  const canonicalUri = '/' + cfg.bucketName + path;
-  const canonicalHeaders = 'host:' + host + '\n';
-  const signedHeaders = 'host';
-  const canonicalRequest = method + '\n' + canonicalUri + '\n' + allParams + '\n' + canonicalHeaders + '\n' + signedHeaders + '\nUNSIGNED-PAYLOAD';
+  var sortedKeys = Object.keys(authParams).sort();
+  var canonicalQsParts = sortedKeys.map(function(k) {
+    return _uriEncode(k, false) + '=' + _uriEncode(authParams[k], false);
+  });
+  var canonicalQs = canonicalQsParts.join('&');
 
-  const requestHash = await _sha256Hex(canonicalRequest);
-  const stringToSign = 'AWS4-HMAC-SHA256\n' + amzDate + '\n' + credentialScope + '\n' + requestHash;
+  var canonicalUri = '/' + cfg.bucketName + path;
+  var canonicalHeaders = 'host:' + host + '\n' + 'x-amz-content-sha256:UNSIGNED-PAYLOAD\n';
+  var signedHeaders = 'host;x-amz-content-sha256';
+  var canonicalRequest = method + '\n' + canonicalUri + '\n' + canonicalQs + '\n' + canonicalHeaders + '\n' + signedHeaders + '\nUNSIGNED-PAYLOAD';
 
-  const kDate = await _hmacSha256('AWS4' + cfg.secretAccessKey, dateStamp);
-  const kRegion = await _hmacSha256(kDate, 'auto');
-  const kService = await _hmacSha256(kRegion, 's3');
-  const kSigning = await _hmacSha256(kService, 'aws4_request');
-  const signature = _toHex(await _hmacSha256(kSigning, stringToSign));
+  var requestHash = await _sha256Hex(canonicalRequest);
+  var stringToSign = 'AWS4-HMAC-SHA256\n' + amzDate + '\n' + credentialScope + '\n' + requestHash;
 
-  const url = 'https://' + host + canonicalUri + '?' + allParams + '&X-Amz-Signature=' + signature;
-  return { url, host };
+  var kDate = await _hmacSha256('AWS4' + cfg.secretAccessKey, dateStamp);
+  var kRegion = await _hmacSha256(kDate, 'auto');
+  var kService = await _hmacSha256(kRegion, 's3');
+  var kSigning = await _hmacSha256(kService, 'aws4_request');
+  var signature = _toHex(await _hmacSha256(kSigning, stringToSign));
+
+  var url = 'https://' + host + canonicalUri + '?' + canonicalQs + '&X-Amz-Signature=' + signature;
+  return { url: url, host: host };
 }
 
 // ====== 检查 R2 中是否存在某个 key ======
@@ -89,7 +100,7 @@ async function r2KeyExists(key) {
     'max-keys=100'
   ], cfg);
 
-  const resp = await fetch(url);
+  const resp = await fetch(url, { headers: { 'x-amz-content-sha256': 'UNSIGNED-PAYLOAD' } });
   const xml = await resp.text();
 
   // 解析 XML 查找精确匹配的 key
@@ -112,29 +123,35 @@ async function r2GeneratePresignedPutUrl(key, expiresIn) {
   const amzDate = _formatAmzDate(now);
   const credentialScope = dateStamp + '/auto/s3/aws4_request';
 
-  const params = [
-    'X-Amz-Algorithm=AWS4-HMAC-SHA256',
-    'X-Amz-Credential=' + _uriEncode(cfg.accessKeyId + '/' + credentialScope, true),
-    'X-Amz-Date=' + amzDate,
-    'X-Amz-Expires=' + expiresIn,
-    'X-Amz-SignedHeaders=host'
-  ].join('&');
+  // 按 key 字母序排序 (S3 签名要求)
+  var authParams = {
+    'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
+    'X-Amz-Credential': cfg.accessKeyId + '/' + credentialScope,
+    'X-Amz-Date': amzDate,
+    'X-Amz-Expires': String(expiresIn),
+    'X-Amz-SignedHeaders': 'host;x-amz-content-sha256'
+  };
 
-  const canonicalUri = '/' + cfg.bucketName + '/' + _uriEncode(key, true);
-  const canonicalHeaders = 'host:' + host + '\n';
-  const signedHeaders = 'host';
-  const canonicalRequest = 'PUT\n' + canonicalUri + '\n' + params + '\n' + canonicalHeaders + '\n' + signedHeaders + '\nUNSIGNED-PAYLOAD';
+  var sortedKeys = Object.keys(authParams).sort();
+  var canonicalQs = sortedKeys.map(function(k) {
+    return _uriEncode(k, false) + '=' + _uriEncode(authParams[k], false);
+  }).join('&');
 
-  const requestHash = await _sha256Hex(canonicalRequest);
-  const stringToSign = 'AWS4-HMAC-SHA256\n' + amzDate + '\n' + credentialScope + '\n' + requestHash;
+  var canonicalUri = '/' + cfg.bucketName + '/' + _uriEncode(key, true);
+  var canonicalHeaders = 'host:' + host + '\n' + 'x-amz-content-sha256:UNSIGNED-PAYLOAD\n';
+  var signedHeaders = 'host;x-amz-content-sha256';
+  var canonicalRequest = 'PUT\n' + canonicalUri + '\n' + canonicalQs + '\n' + canonicalHeaders + '\n' + signedHeaders + '\nUNSIGNED-PAYLOAD';
 
-  const kDate = await _hmacSha256('AWS4' + cfg.secretAccessKey, dateStamp);
-  const kRegion = await _hmacSha256(kDate, 'auto');
-  const kService = await _hmacSha256(kRegion, 's3');
-  const kSigning = await _hmacSha256(kService, 'aws4_request');
-  const signature = _toHex(await _hmacSha256(kSigning, stringToSign));
+  var requestHash = await _sha256Hex(canonicalRequest);
+  var stringToSign = 'AWS4-HMAC-SHA256\n' + amzDate + '\n' + credentialScope + '\n' + requestHash;
 
-  return 'https://' + host + canonicalUri + '?' + params + '&X-Amz-Signature=' + signature;
+  var kDate = await _hmacSha256('AWS4' + cfg.secretAccessKey, dateStamp);
+  var kRegion = await _hmacSha256(kDate, 'auto');
+  var kService = await _hmacSha256(kRegion, 's3');
+  var kSigning = await _hmacSha256(kService, 'aws4_request');
+  var signature = _toHex(await _hmacSha256(kSigning, stringToSign));
+
+  return 'https://' + host + canonicalUri + '?' + canonicalQs + '&X-Amz-Signature=' + signature;
 }
 
 // ====== 随机字符串 ======
