@@ -2,58 +2,6 @@
 // 依赖: main.js 中的 apiSrv, password_value, showResult(), addUrlToList(), loadUrlList() 等
 // 依赖: r2-s3.js 中的 r2ResolveFilename, r2GeneratePresignedPutUrl, getR2Config
 
-// ====== 覆盖 buildValueItemFunc: URL 文本 + 预览按钮 (点击加载原图) ======
-buildValueItemFunc = function(r2Url) {
-  var container = document.createElement('div');
-  container.classList.add("form-control", "rounded-top-0");
-
-  var urlText = document.createElement('span');
-  urlText.style.wordBreak = 'break-all';
-  urlText.innerText = r2Url;
-  container.appendChild(urlText);
-
-  var previewArea = document.createElement('div');
-  previewArea.style.display = 'none';
-  container.appendChild(previewArea);
-
-  var btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'btn btn-outline-info btn-sm mt-2';
-  btn.innerText = '🔍 预览';
-  btn.onclick = function() {
-    if (previewArea.style.display !== 'none' && previewArea.children.length > 0) {
-      previewArea.style.display = 'none';
-      previewArea.innerHTML = '';
-      btn.innerText = '🔍 预览';
-      return;
-    }
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
-    var img = document.createElement('img');
-    img.src = r2Url;
-    img.style.cssText = 'max-width:100%;max-height:400px;border-radius:6px;cursor:pointer;margin-top:4px;';
-    img.title = '点击查看原图';
-    img.onload = function() {
-      btn.disabled = false;
-      btn.innerText = '🔽 收起';
-      previewArea.style.display = 'block';
-    };
-    img.onerror = function() {
-      btn.disabled = false;
-      btn.innerText = '🔍 预览';
-      previewArea.innerHTML = '<small class="text-danger">加载失败</small>';
-      previewArea.style.display = 'block';
-    };
-    img.onclick = function() { window.open(r2Url, '_blank'); };
-    previewArea.innerHTML = '';
-    previewArea.appendChild(img);
-    previewArea.style.display = 'block';
-  };
-  container.appendChild(btn);
-
-  return container;
-}
-
 // ====== 状态变量 ======
 let r2UploadUrl = null;   // presigned PUT URL
 let r2PublicUrl = null;   // R2 公开 URL
