@@ -128,7 +128,42 @@
   <!-- file-r2 逻辑 -->
   <script src="https://crazypeace.github.io/Url-Shorten-Worker/file-r2.js" crossorigin="anonymous"></script>
 
-  <!-- file-r2 预览覆盖 (缩略图 512px) -->
-  <script src="https://crazypeace.github.io/Url-Shorten-Worker/file-r2-preview.js" crossorigin="anonymous"></script>
+  <script>
+    // 覆盖 buildValueItemFunc: 缩略图 512px, 不判断文件类型, 失败就失败
+    // 用户需在 R2 自定义域名上开启 Image Transformations
+    // 函数的定义在 main.js 中
+    (function() {
+      var IMG_MAX = 512;
+
+      function thumbUrl(r2Url) {
+        try {
+          var u = new URL(r2Url);
+          return u.origin + "/cdn-cgi/image/width=" + IMG_MAX + ",quality=75,format=auto" + u.pathname;
+        } catch(e) {
+          return r2Url;
+        }
+      }
+
+      buildValueItemFunc = function(longUrl) {
+        var wrap = document.createElement('div');
+        wrap.classList.add("form-control", "rounded-top-0");
+
+        var img = document.createElement('img');
+        img.src = thumbUrl(longUrl);
+        img.style.cssText = "max-width:" + IMG_MAX + "px;max-height:" + IMG_MAX + "px;border-radius:6px;cursor:pointer;display:block;";
+        img.title = '点击查看原图';
+        img.onerror = function() { img.remove(); };
+        img.onclick = function() { window.open(longUrl, '_blank'); };
+        wrap.appendChild(img);
+
+        var txt = document.createElement('small');
+        txt.style.cssText = 'word-break:break-all;display:block;margin-top:4px;opacity:0.7;';
+        txt.innerText = longUrl;
+        wrap.appendChild(txt);
+
+        return wrap;
+      };
+    })();
+  </script>
 </body>
 </html>
