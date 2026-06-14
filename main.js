@@ -181,10 +181,24 @@ function clearLocalStorage() {
   localStorage.clear()
 }
 
-function deleteShortUrl(delKeyPhrase) {
+async function deleteShortUrl(delKeyPhrase) {
   // 按钮状态 Button Status
   document.getElementById("delBtn-" + delKeyPhrase).disabled = true;
   document.getElementById("delBtn-" + delKeyPhrase).innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
+
+  // 先尝试删除 R2 文件 (file-r2 theme 提供 r2DeleteObject)
+  try {
+    let longUrl = localStorage.getItem(delKeyPhrase);
+    if (longUrl && typeof r2DeleteObject === 'function') {
+      let u = new URL(longUrl);
+      let key = decodeURIComponent(u.pathname.slice(1)); // "/abc.webp" → "abc.webp"
+      if (key) {
+        await r2DeleteObject(key);
+      }
+    }
+  } catch (e) {
+    console.log('R2 delete failed:', e);
+  }
 
   // 从KV中删除 Remove item from KV
   fetch(apiSrv, {

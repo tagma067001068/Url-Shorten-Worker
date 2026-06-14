@@ -155,6 +155,14 @@ async function r2GeneratePresignedPutUrl(key, expiresIn) {
   return 'https://' + host + canonicalUri + '?' + canonicalQs + '&X-Amz-Signature=' + signature;
 }
 
+// ====== 删除 R2 对象 ======
+async function r2DeleteObject(key) {
+  const cfg = getR2Config();
+  const { url } = await _signedFetch('DELETE', '/' + _uriEncode(key, true), [], cfg);
+  const resp = await fetch(url, { method: 'DELETE' });
+  return resp.ok;
+}
+
 // ====== 随机字符串 ======
 function r2RandomString(len) {
   len = len || 6;
