@@ -280,13 +280,6 @@ function onUploadDone(key, r2Url) {
   showResult('文件已上传到 R2: ' + r2Url + '\n请点击"保存到 KV"写入 KV');
 }
 
-// ====== 保存到 KV（调用 main.js 的 shorturl, 写 KV + localStorage + 刷新列表）======
-function saveToKV() {
-  // longURL 和 keyPhrase 已由 onUploadDone 填入
-  // 调用 main.js 的 shorturl() 完成 add 命令 (写 KV + localStorage + 刷新列表)
-  shorturl();
-}
-
 // ====== 工具函数 ======
 function resetUploadBtn() {
   uploadBtn.disabled = false;
