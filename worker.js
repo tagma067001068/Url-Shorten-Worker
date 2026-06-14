@@ -410,9 +410,6 @@ async function handleRequest(request) {
     return new Response(blob, {
       // 图片不能指定content-type为 text/plain
     })
-  } else if (config.system_type == "file-r2") {
-    // file-r2: value 是 R2 公开 URL, 直接 302 重定向
-    return Response.redirect(value, 302)
   } else {
     // 如果只是一个单纯的key-value系统, 简单的显示value就行了
     return new Response(value, {
