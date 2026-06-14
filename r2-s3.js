@@ -69,7 +69,7 @@ async function _signedFetch(method, path, queryParams, cfg) {
 
   var sortedKeys = Object.keys(authParams).sort();
   var canonicalQsParts = sortedKeys.map(function(k) {
-    return _uriEncode(k, false) + '=' + _uriEncode(authParams[k], false);
+    return _uriEncode(k, true) + '=' + _uriEncode(authParams[k], true);
   });
   var canonicalQs = canonicalQsParts.join('&');
 
@@ -134,7 +134,7 @@ async function r2GeneratePresignedPutUrl(key, expiresIn) {
 
   var sortedKeys = Object.keys(authParams).sort();
   var canonicalQs = sortedKeys.map(function(k) {
-    return _uriEncode(k, false) + '=' + _uriEncode(authParams[k], false);
+    return _uriEncode(k, true) + '=' + _uriEncode(authParams[k], true);
   }).join('&');
 
   var canonicalUri = '/' + cfg.bucketName + '/' + _uriEncode(key, true);
