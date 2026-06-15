@@ -17,17 +17,15 @@ const protect_keylist = [
   "password",
 ]
 
-// ====== R2 S3 API 配置 (file-r2 模式) ======
-// 以下变量通过 Cloudflare 面板的环境变量(Variables)/加密机密(Secrets)注入, 作为全局变量自动可用:
-//   R2_ACCOUNT_ID        - R2 账户 ID (明文变量)
-//   R2_ACCESS_KEY_ID     - S3 API Access Key ID (建议设为加密 Secret)
-//   R2_SECRET_ACCESS_KEY - S3 API Secret Access Key (建议设为加密 Secret)
-//   R2_BUCKET_NAME       - R2 存储桶名称 (明文变量)
-//   R2_PUBLIC_URL        - R2 公开访问 URL, 如 https://pub-xxxx.r2.dev (明文变量)
-// 注意: 面板中的变量名必须与上述完全一致(含大小写)
-
-// S3 签名 + presigned URL 已移至前端 r2-s3.js
-// Worker 仅负责注入 R2 配置占位符 + KV 读写
+// ====== R2 S3 API 配置 (文件保管站 file-r2 模式) ======
+// 以下变量推荐通过 Cloudflare 面板的环境变量(Variables)/加密机密(Secrets)注入, 作为全局变量自动可用
+// 注意: 面板中的变量名必须与代码完全一致(注意大小写敏感)
+// 偷懒也可以直接在这里赋值
+//   R2_ACCOUNT_ID        = "" // - R2 账户 ID (明文变量)
+//   R2_ACCESS_KEY_ID     = "" // - S3 API Access Key ID (建议设为加密 Secret)
+//   R2_SECRET_ACCESS_KEY = "" // - S3 API Secret Access Key (建议设为加密 Secret)
+//   R2_BUCKET_NAME       = "" // - R2 存储桶名称 (明文变量)
+//   R2_PUBLIC_URL        = "" // - R2 公开访问 URL, 如 https://pub-xxxx.r2.dev (明文变量)
 
 let index_html = "https://crazypeace.github.io/Url-Shorten-Worker/" + config.theme + "/index.html"
 let result_html = "https://crazypeace.github.io/Url-Shorten-Worker/" + config.theme + "/result.html"
