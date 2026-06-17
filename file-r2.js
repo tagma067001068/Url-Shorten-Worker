@@ -348,3 +348,84 @@ function formatBytes(bytes) {
   var i = Math.floor(Math.log(bytes) / Math.log(k));
   return (bytes / Math.pow(k, i)).toFixed(1) + ' ' + sizes[i];
 }
+
+// ====== load R2 to KV: 列出 R2 全部文件, 写入 KV ======
+async function loadR2ToKV() {
+  const cfg = getR2Config();
+  if (!cfg.accountId || !cfg.bucketName) {
+    alert('R2 配置未就绪');
+    return;
+  }
+
+  const btn = document.getElementById('loadR2Btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 读取 R2...';
+
+  try {
+    // 列出 bucket 中所有对象
+    const { url } = await _signedFetch('GET', '', [
+      'list-type=2',
+      'max-keys=1000'
+    ], cfg);
+
+    const resp = await fetch(url);
+    const xml = await resp.text();
+
+    // 解析 XML 提取所有 Key
+    const keys = [];
+    const re = /<Key>(.*?)<\/Key>/g;
+    let m;
+    while ((m = re.exec(xml)) !== null) {
+      keys.push(m[1]);
+    }
+
+    if (keys.length === 0) {
+      btn.disabled = false;
+      btn.innerHTML = 'load R2 to KV';
+      alert('R2 中没有文件');
+      return;
+    }
+
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 写入 KV (0/' + keys.length + ')...';
+
+    // 逐个写入 KV
+    let success = 0;
+    let fail = 0;
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      const r2Url = cfg.publicUrl + '/' + encodeURIComponent(key);
+
+      try {
+        const result = await fetch(apiSrv, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cmd: "add", url: r2Url, key: key, password: password_value })
+        }).then(r => r.json());
+
+        if (result.status == "200") {
+          success++;
+          // 同步写入 localStorage
+          localStorage.setItem(key, r2Url);
+        } else {
+          fail++;
+        }
+      } catch (e) {
+        fail++;
+      }
+
+      // 更新进度
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> 写入 KV (' + (i + 1) + '/' + keys.length + ')...';
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = 'load R2 to KV';
+    loadUrlList(); // 刷新列表
+
+    showResult('R2 → KV 完成<br>成功: ' + success + '<br>失败: ' + fail);
+
+  } catch (err) {
+    btn.disabled = false;
+    btn.innerHTML = 'load R2 to KV';
+    alert('读取 R2 失败: ' + err.message);
+  }
+}

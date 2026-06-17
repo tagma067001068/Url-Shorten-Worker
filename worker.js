@@ -338,6 +338,10 @@ async function handleRequest(request) {
     index = index.replace(/__R2_SECRET_ACCESS_KEY__/gm, (typeof R2_SECRET_ACCESS_KEY !== 'undefined') ? R2_SECRET_ACCESS_KEY : '')
     index = index.replace(/__R2_BUCKET_NAME__/gm, (typeof R2_BUCKET_NAME !== 'undefined') ? R2_BUCKET_NAME : '')
     index = index.replace(/__R2_PUBLIC_URL__/gm, (typeof R2_PUBLIC_URL !== 'undefined') ? R2_PUBLIC_URL : '')
+    if (!config.load_kv) {
+      index = index.replace(/onclick='loadR2ToKV\(\)'/gm, "onclick='' disabled")
+      index = index.replace(/onclick='loadKV\(\)'/gm, "onclick='' disabled")
+    }
     return new Response(index, {
       headers: response_header,
     })
