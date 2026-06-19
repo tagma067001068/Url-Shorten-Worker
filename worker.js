@@ -42,6 +42,9 @@ const html404 = `<!DOCTYPE html>
 let response_header = {
   "Content-type": "text/html;charset=UTF-8;application/json",
 }
+let response_header_plain = {
+  "Content-type": "text/plain;charset=UTF-8;",
+}
 
 if (config.cors) {
   response_header = {
@@ -49,6 +52,11 @@ if (config.cors) {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST",
     "Access-Control-Allow-Headers": "Content-Type",
+  }
+  
+  response_header_plain = {
+  "Content-type": "text/plain;charset=UTF-8;",
+    "Access-Control-Allow-Origin": "*",
   }
 }
 
@@ -415,9 +423,7 @@ async function handleRequest(request) {
   } else {
     // 如果只是一个单纯的key-value系统, 简单的显示value就行了
     return new Response(value, {
-      headers: {
-          "Content-type": "text/plain;charset=UTF-8;",
-        },
+      headers: response_header_plain,
     })
   }
 }
